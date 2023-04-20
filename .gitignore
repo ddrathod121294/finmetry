@@ -1,0 +1,20 @@
+# files to ignore
+Readme.ipynb
+*.ipynb
+**/ Readme.ipynb
+md_convertor.py
+
+# general things to ignore
+build/
+dist/
+*.egg-info/
+*.egg
+*.py[cod]
+__pycache__/
+**/*.ipynb_checkpoints/
+*.so
+*~
+
+# due to using tox and pytest
+.tox
+.cache
