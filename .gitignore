@@ -1,10 +1,10 @@
-# files to ignore
+### files to ignore
 Readme.ipynb
 *.ipynb
 **/ Readme.ipynb
 md_convertor.py
 
-# general things to ignore
+### general things to ignore
 build/
 dist/
 *.egg-info/
@@ -15,6 +15,12 @@ __pycache__/
 *.so
 *~
 
-# due to using tox and pytest
+### Projects to ignore
+Projects/option_strategy1
+Projects/market_depth_analysis
+Projects/Dash_app1
+
+
+### due to using tox and pytest
 .tox
 .cache

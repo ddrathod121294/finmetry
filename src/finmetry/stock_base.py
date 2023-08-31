@@ -64,9 +64,13 @@ class Stock:
             make_dir(self.local_data_foldpath)
 
     def __repr__(self):
-        return f'{self.symbol} stock class'
-    
-    def save_historical_data(self, data: _pd.DataFrame, interval: str,) -> None:
+        return f"{self.symbol} stock class"
+
+    def save_historical_data(
+        self,
+        data: _pd.DataFrame,
+        interval: str,
+    ) -> None:
         """saves the historical stock data.
 
         Multiple files, each for saparate month data is created.
@@ -81,7 +85,7 @@ class Stock:
         self.data = data
 
         if self.store_local is False:
-            return
+            return data
 
         start_time = data.index[0]
         end_time = data.index[-1]
@@ -151,10 +155,10 @@ class Stock:
                         _pd.read_pickle(_os.path.join(self.local_data_foldpath, fname))
                     )
                     dates.append(dt_val)
-        
+
         if dates == []:
-            raise ValueError('No data found in given time period or time frame')
-        
+            raise ValueError("No data found in given time period or time frame")
+
         ### sorting and concatenating
         dates = _np.array(dates)
         idx = _np.argsort(dates)
@@ -186,7 +190,10 @@ class Stock:
         _pd.DataFrame
             scrip data.
         """
-        return _pd.read_pickle(self.scrip_filepath)
+        if self.store_local:
+            return _pd.read_pickle(self.scrip_filepath)
+        else:
+            return self._scrip
 
     @scrip.setter
     def scrip(self, data: _pd.DataFrame) -> None:
@@ -199,5 +206,180 @@ class Stock:
         """
         if self.store_local:
             data.to_pickle(self.scrip_filepath)
+        else:
+            self._scrip = data
         return
 
+    @property
+    def option_chain_filepath(self) -> str:
+        """filepath of option chain
+
+        Returns
+        -------
+        str
+            filepath
+        """
+        return _os.path.join(self.local_data_foldpath, "option_chain.pickle")
+
+    @property
+    def option_chain(self) -> _pd.DataFrame:
+        """option chain for stock
+
+        Returns
+        -------
+        _pd.DataFrame
+            scrip data.
+        """
+        return _pd.read_pickle(self.option_chain_filepath)
+
+    @option_chain.setter
+    def option_chain(self, data: _pd.DataFrame) -> None:
+        """saves the option chain
+
+        Parameters
+        ----------
+        data : _pd.DataFrame
+            option_chain data.
+        """
+        if self.store_local:
+            data.to_pickle(self.option_chain_filepath)
+        return
+
+    ############################################################################################
+    ############################################################################################
+    ############################################################################################
+    ### market depths related functions
+
+    @property
+    def available_market_depths(self) -> list[str]:
+        """gets the dates of available market depths data. The returned dates are in the form YYYYMMDD.
+
+        Returns
+        -------
+        list[str]
+            list of dates.
+        """
+        dates = []
+        files = get_file_name(self.local_data_foldpath)
+        for fname in files:
+            if "market_depth" in fname:
+                nm = fname.split("_")
+                dates.append(nm[0])
+        return dates
+
+    def load_market_depths(self, dates: list[str]) -> _pd.DataFrame:
+        """returns the market_depth data for provided list of dates in single pandas dataframe. The dates should be in YYYYMMDD format.
+
+        Parameters
+        ----------
+        dates : list[str]
+            list of dates for market depths data. Dates for available data can be obtained from available_market_depths property.
+
+        Returns
+        -------
+        _pd.DataFrame
+            market_depth data
+        """
+        dt_int = [int(x) for x in dates]
+        dt_int.sort(reverse=False)
+        ans = _pd.DataFrame()
+        for dt in dt_int:
+            fname = str(dt) + "_market_depth.pickle"
+            fpath = _os.path.join(self.local_data_foldpath, fname)
+            ans = _pd.concat([ans, _pd.read_pickle(fpath)])
+        return ans
+
+    @property
+    def available_expiries(self) -> dict:
+        """returns the expiry dates for which the market depth data is available. Also gives the dates of market_depths for those expiry.
+
+        Returns
+        -------
+        dict
+            key indicates the expiry date and list of values indicated the available market_depth dates.
+        """
+        nms = get_dir_name(self.local_data_foldpath)
+        exps = []
+        for nm in nms:
+            if f"N_D_{self.symbol}" in nm:
+                exp = " ".join(nm.split(" ")[1:4])
+                if exp not in exps:
+                    exps.append(exp)
+
+        ans = {}
+        for exp in exps:
+            dates = []
+            for nm in nms:
+                if exp in nm:
+                    fp1 = _os.path.join(self.local_data_foldpath, nm)
+                    fnames = get_file_name(fp1)
+                    for fname in fnames:
+                        if "market_depth" in fname:
+                            nm = fname.split("_")
+                            if nm[0] not in dates:
+                                dates.append(nm[0])
+            ans[exp] = dates
+        return ans
+
+    def load_op_data(
+        self, date: str, expiry: str
+    ) -> tuple[_pd.DataFrame, _pd.DataFrame, _pd.DataFrame]:
+        """loads the market_depths_data for all strikes for given date and expiry.
+
+        The user has to check the available date and expiry for the underlying from self.available_expiries and then provide the according combination of date and expiry.
+
+        Parameters
+        ----------
+        date : str
+            date in YYYYMMDD format
+        expiry : str
+            expiry in DD MON YYYY format. eg. 10 AUG 2023.
+
+        Returns
+        -------
+        _pd.DataFrame, _pd.DataFrame, _pd.DataFrame
+            underlying, CE and PE data respectively
+        """
+        nms = get_dir_name(self.local_data_foldpath)
+        ans_ce = {}
+        ans_pe = {}
+        # ans[self.symbol] = self.load_market_depths(dates=[date])
+        for nm in nms:
+            if expiry in nm:
+                fp1 = _os.path.join(self.local_data_foldpath, nm)
+                f_nms = get_file_name(fp1)
+                for fnms in f_nms:
+                    if date in fnms:
+                        fp2 = _os.path.join(fp1, fnms)
+                        op_name = nm.split(" ")
+                        strike = float(op_name[-1])
+                        if op_name[-2] == "CE":
+                            ans_ce[strike] = _pd.read_pickle(fp2)
+                        elif op_name[-2] == "PE":
+                            ans_pe[strike] = _pd.read_pickle(fp2)
+
+        d1_CE = _pd.concat(ans_ce.values(), axis=1, keys=ans_ce.keys()).swaplevel(
+            0, axis=1
+        )
+        d1_PE = _pd.concat(ans_pe.values(), axis=1, keys=ans_pe.keys()).swaplevel(
+            0, axis=1
+        )
+
+        bnf = self.load_market_depths(dates=[date])
+        d1_CE["OpenInterest"] = d1_CE["OpenInterest"].astype("int")
+        d1_PE["OpenInterest"] = d1_PE["OpenInterest"].astype("int")
+        for ky in d1_CE["LastTradedPrice"].keys():
+            strike = ky
+            arr1 = bnf["LastTradedPrice"] - strike
+            f1 = arr1 < 0
+            arr1[f1] = 0
+            d1_CE["BasicValue", ky] = arr1
+            d1_CE["ExpectedValue", ky] = d1_CE["LastTradedPrice", ky] - arr1
+
+            arr1 = strike - bnf["LastTradedPrice"]
+            f1 = arr1 < 0
+            arr1[f1] = 0
+            d1_PE["BasicValue", ky] = arr1
+            d1_PE["ExpectedValue", ky] = d1_PE["LastTradedPrice", ky] - arr1
+        self.bnf, self.d1_CE, self.d1_PE = bnf, d1_CE, d1_PE
+        return self.bnf, self.d1_CE, self.d1_PE

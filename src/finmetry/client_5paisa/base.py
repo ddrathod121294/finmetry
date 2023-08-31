@@ -39,7 +39,7 @@ class ScripMaster:
             filepath to .csv file. If filepath is given then it reads the file, else it will download the file. by default None
         """
         if filepath is not None:
-            self.data = _pd.read_csv(filepath,index_col=0)
+            self.data = _pd.read_csv(filepath, index_col=0,low_memory=False)
         else:
             self.data = _pd.read_csv(
                 "https://images.5paisa.com/website/scripmaster-csv-format.csv"
@@ -100,8 +100,9 @@ class ScripMaster:
                 d2 = d1[f1 & f2]
                 if d2.empty:
                     raise ValueError(f"No Scrip found for {s1.symbol} in scrip_master")
-                s1.scrip = d2.set_index("Name")
-                ls1.append(s1.scrip)
+                d2 = d2.set_index("Name")
+                s1.scrip = d2
+                ls1.append(d2)
         return _pd.concat(ls1)
 
 
@@ -259,9 +260,10 @@ class Client5paisa(_p5.FivePaisaClient):
         _pd.DataFrame
             Live Market Depth for all the Stocks in list.
         """
-        a = _pd.DataFrame()
-        for s1 in stocklist:
-            a = _pd.concat([a, s1.scrip])
+        # a = _pd.DataFrame()
+        # for s1 in stocklist:
+        #     a = _pd.concat([a, s1.scrip])
+        a = self.scrip_master.get_scrip(stocklist)
         syms = a["Symbol"].values
         a = a.rename(columns={"Exch": "Exchange", "ExchType": "ExchangeType"})[
             ["Exchange", "ExchangeType", "Symbol"]
@@ -285,9 +287,10 @@ class Client5paisa(_p5.FivePaisaClient):
         _pd.DataFrame
             Live Market Feed for all the Stocks in list.
         """
-        a = _pd.DataFrame()
-        for s1 in stocklist:
-            a = _pd.concat([a, s1.scrip])
+        # a = _pd.DataFrame()
+        # for s1 in stocklist:
+        #     a = _pd.concat([a, s1.scrip])
+        a = self.scrip_master.get_scrip(stocklist)
         a = a[["Exch", "ExchType", "Symbol"]].to_dict(orient="records")
         d1 = _pd.DataFrame(self.fetch_market_feed(a)["Data"])
         d1["Datetime"] = _dtm.datetime.now()
@@ -312,9 +315,10 @@ class Client5paisa(_p5.FivePaisaClient):
         _pd.DataFrame
             Data
         """
-        a = _pd.DataFrame()
-        for s1 in stocklist:
-            a = _pd.concat([a, s1.scrip])
+        # a = _pd.DataFrame()
+        # for s1 in stocklist:
+        #     a = _pd.concat([a, s1.scrip])
+        a = self.scrip_master.get_scrip(stocklist)
         a = a.rename(columns={"Scripcode": "ScripCode"})[
             ["Exch", "ExchType", "ScripCode"]
         ].to_dict(orient="records")
@@ -366,13 +370,38 @@ class Client5paisa(_p5.FivePaisaClient):
         return d1
 
     def get_option_chain(
-        self, stock: Stock, expiry_date: Union[str, _dtm.datetime]
+        self, stock: Stock, expiry_date: Union[str, _dtm.datetime], update: bool = True
     ) -> _pd.DataFrame:
-        if type(expiry_date) is str:
-            expiry_date = _dtm.datetime.strptime(expiry_date, "%Y-%m-%d").date()
-        d1 = self.get_weekly_option_expiry()
-        f1 = d1["Date"] == expiry_date
-        ts = d1[f1]["Timestamp"].iloc[0]
+        """gets the option chain data for the given stock
 
-        return _pd.DataFrame(super().get_option_chain(stock.exchange, stock.symbol, ts)['Options'])
+        Parameters
+        ----------
+        stock : Stock
+            Stock 
+        expiry_date : Union[str, _dtm.datetime]
+            expiry date of option chain
+        update : bool, optional
+            whether to update the option chain at local folder
+
+        Returns
+        -------
+        _pd.DataFrame
+            option chain data
+        """
+        try:
+            if update:
+                raise AttributeError
+            else:
+                return stock.option_chain
+        except:
+            if type(expiry_date) is str:
+                expiry_date = _dtm.datetime.strptime(expiry_date, "%Y-%m-%d").date()
+            d1 = self.get_weekly_option_expiry()
+            f1 = d1["Date"] == expiry_date
+            ts = d1[f1]["Timestamp"].iloc[0]
+            d2 = _pd.DataFrame(
+                super().get_option_chain(stock.exchange, stock.symbol, ts)["Options"]
+            )
+            stock.option_chain = d2
+            return d2
 

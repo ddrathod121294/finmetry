@@ -6,7 +6,7 @@ In depth tests on various stock market tools are conducted.
 
 ## The current version is
 
-    0.1.3
+    0.1.5
     
 
 # Importing and initiating
